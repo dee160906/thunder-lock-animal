@@ -1,0 +1,884 @@
+<!DOCTYPE html>
+<html lang="ms">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lightning Teacher - Thunder Lock: Dunia Haiwan</title>
+    <!-- Tailwind CSS untuk susun atur responsif -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- MediaPipe Hands & Camera Utils CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <style>
+        /* Fon bulat mesra kanak-kanak prasekolah tanpa pergantungan fail luar */
+        body {
+            font-family: 'Comic Sans MS', 'Chalkboard SE', 'Trebuchet MS', system-ui, -apple-system, sans-serif;
+            overflow: hidden;
+            user-select: none;
+            background: radial-gradient(circle at center, #1e1b4b 0%, #0f172a 100%);
+        }
+
+        /* Animasi melantun lembut untuk haiwan */
+        @keyframes floatAnimal {
+            0%, 100% { transform: translateY(0px) scale(1); }
+            50% { transform: translateY(-10px) scale(1.06); }
+        }
+        .animate-float {
+            animation: floatAnimal 2.4s ease-in-out infinite;
+        }
+
+        /* Kesan sasaran dikunci (Thunder Lock) */
+        .habitat-card {
+            transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s ease, border-color 0.2s ease;
+        }
+        .habitat-card.locked {
+            transform: scale(1.08);
+            border-color: #facc15 !important;
+            box-shadow: 0 0 38px rgba(250, 204, 21, 0.95), inset 0 0 22px rgba(250, 204, 21, 0.45);
+            z-index: 20;
+        }
+
+        /* Kesan kilat skrin penuh */
+        @keyframes screenFlash {
+            0% { background-color: rgba(255, 255, 255, 0.88); }
+            100% { background-color: rgba(255, 255, 255, 0); }
+        }
+        .flash-effect {
+            animation: screenFlash 0.35s ease-out forwards;
+        }
+
+        /* Animasi gegaran apabila jawapan salah */
+        @keyframes shakeCard {
+            0%, 100% { transform: translateX(0); }
+            20% { transform: translateX(-12px) rotate(-2deg); }
+            40% { transform: translateX(12px) rotate(2deg); }
+            60% { transform: translateX(-8px); }
+            80% { transform: translateX(8px); }
+        }
+        .shake-wrong {
+            animation: shakeCard 0.45s ease-in-out;
+        }
+
+        /* Kanvas lapisan untuk petir dan percikan */
+        #fx-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 40;
+        }
+
+        /* Pratonton Webcam terbalik (cermin) */
+        #webcam-preview {
+            transform: scaleX(-1);
+        }
+
+        /* Gelang Sasaran (Thunder Reticle) */
+        #hand-reticle {
+            position: fixed;
+            width: 88px;
+            height: 88px;
+            margin-left: -44px;
+            margin-top: -44px;
+            pointer-events: none;
+            z-index: 45;
+            transition: transform 0.08s ease-out;
+        }
+
+        @keyframes spinSlow {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+        .reticle-ring {
+            animation: spinSlow 4s linear infinite;
+        }
+    </style>
+</head>
+<body class="text-white h-screen w-screen flex flex-col justify-between relative">
+
+    <!-- Lapisan Kilat Skrin -->
+    <div id="flash-overlay" class="fixed inset-0 pointer-events-none z-50"></div>
+
+    <!-- Kanvas Efek Petir & Kesan Visual -->
+    <canvas id="fx-canvas"></canvas>
+
+    <!-- Penunjuk Sasaran Tangan (Thunder Reticle) -->
+    <div id="hand-reticle" class="hidden flex items-center justify-center">
+        <div id="reticle-outer" class="reticle-ring w-full h-full rounded-full border-4 border-dashed border-yellow-300 shadow-[0_0_20px_#fde047]"></div>
+        <div id="reticle-core" class="absolute w-7 h-7 rounded-full bg-yellow-400 shadow-[0_0_15px_#ffffff] flex items-center justify-center text-sm font-bold text-slate-900">⚡</div>
+    </div>
+
+    <!-- =========================================================
+         1. SKRIN MULA (START SCREEN)
+    ========================================================== -->
+    <div id="start-screen" class="fixed inset-0 z-30 flex flex-col items-center justify-center p-4 bg-gradient-to-b from-indigo-900 via-purple-900 to-slate-900 text-center">
+        <div class="max-w-2xl w-full bg-white/10 backdrop-blur-md border-4 border-yellow-400 rounded-3xl p-6 sm:p-8 shadow-2xl">
+            <div class="text-6xl sm:text-7xl mb-2 animate-bounce">⚡🦁⚡</div>
+            <h1 class="text-3xl sm:text-5xl font-extrabold text-yellow-300 drop-shadow-[0_4px_4px_rgba(0,0,0,0.6)] tracking-wide">
+                LIGHTNING TEACHER
+            </h1>
+            <h2 class="text-xl sm:text-2xl font-bold text-cyan-300 mt-1 mb-4">
+                Thunder Lock: Dunia Haiwan
+            </h2>
+
+            <div class="bg-slate-900/75 rounded-2xl p-4 sm:p-5 mb-6 text-left border-2 border-indigo-400/50 space-y-3 text-base sm:text-lg">
+                <p class="font-bold text-yellow-300 text-center text-xl mb-2">🖐️ Cara Bermain:</p>
+                <div class="flex items-center gap-3">
+                    <span class="text-3xl">✋</span>
+                    <span>Halakan <strong>tapak tangan terbuka</strong> ke kamera untuk mengunci kad tempat tinggal haiwan.</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-3xl">✊</span>
+                    <span><strong>Genggam tangan (Clench Fist)</strong> atau <strong>tarik tangan ke arah diri</strong> untuk memanah petir ⚡!</span>
+                </div>
+                <div class="flex items-center gap-3">
+                    <span class="text-3xl">🖱️</span>
+                    <span class="text-sm text-slate-300">(Boleh juga guna tetikus / sentuh skrin jika tiada kamera)</span>
+                </div>
+            </div>
+
+            <button id="start-btn" onclick="initGame()" class="w-full sm:w-auto px-10 py-4 bg-gradient-to-r from-yellow-400 via-amber-500 to-orange-500 hover:from-yellow-300 hover:to-orange-400 text-slate-950 font-extrabold text-2xl rounded-full shadow-[0_8px_0_#b45309] active:translate-y-1 active:shadow-[0_4px_0_#b45309] transition-all cursor-pointer">
+                ⚡ MULA BERMAIN! ⚡
+            </button>
+            <p id="loading-status" class="mt-4 text-cyan-300 font-semibold hidden animate-pulse">
+                Sedang menghidupkan kamera & kuasa petir... Sila benarkan akses kamera!
+            </p>
+        </div>
+    </div>
+
+    <!-- =========================================================
+         2. PAPARAN UTAMA PERMAINAN (GAMEPLAY UI)
+    ========================================================== -->
+    <!-- Bar Atas: Nombor Soalan & Skor -->
+    <header class="w-full px-3 sm:px-6 pt-3 flex items-center justify-between gap-2 z-20">
+        <!-- Nombor Soalan -->
+        <div class="flex items-center gap-2 sm:gap-4">
+            <div class="bg-slate-900/80 border-2 border-cyan-400 rounded-2xl px-4 py-2 sm:px-5 sm:py-2.5 font-bold text-lg sm:text-2xl text-cyan-300 shadow-lg">
+                Soalan <span id="question-counter">1/10</span>
+            </div>
+        </div>
+
+        <!-- Skor -->
+        <div class="flex items-center gap-2 sm:gap-4">
+            <div class="bg-slate-900/80 border-2 border-yellow-400 rounded-2xl px-4 py-2 sm:px-5 sm:py-2.5 font-bold text-lg sm:text-2xl text-yellow-300 shadow-lg flex items-center gap-2">
+                <span>⭐</span>
+                <span id="score-display">0</span>
+            </div>
+        </div>
+    </header>
+
+    <!-- Bahagian Tengah: Paparan Haiwan & Soalan + Video Kamera Mini -->
+    <main class="flex-1 flex flex-col items-center justify-center px-4 py-1 relative z-10 max-w-6xl mx-auto w-full">
+        
+        <!-- Kotak Soalan & Haiwan -->
+        <div class="w-full flex flex-col md:flex-row items-center justify-center gap-4 mb-3 sm:mb-5">
+            <!-- Kad Haiwan -->
+            <div class="relative bg-gradient-to-br from-indigo-600/90 to-purple-700/90 border-4 border-yellow-300 rounded-3xl px-6 py-3 sm:px-8 sm:py-4 flex flex-col sm:flex-row items-center gap-4 shadow-[0_10px_25px_rgba(0,0,0,0.5)]">
+                <div id="animal-emoji" class="text-6xl sm:text-8xl animate-float drop-shadow-lg select-none">
+                    🐯
+                </div>
+                <div class="text-center sm:text-left">
+                    <span id="animal-badge" class="inline-block bg-yellow-400 text-slate-950 font-extrabold text-xs sm:text-sm px-3 py-1 rounded-full uppercase tracking-wider mb-1">
+                        HARIMAU
+                    </span>
+                    <h2 id="question-text" class="text-2xl sm:text-4xl font-extrabold text-white drop-shadow">
+                        Di manakah harimau tinggal?
+                    </h2>
+                    <p id="gesture-hint" class="text-xs sm:text-sm text-cyan-200 mt-1 font-medium">
+                        ✋ Halakan tapak tangan ke kad jawapan, kemudian ✊ genggam atau tarik tangan untuk petir!
+                    </p>
+                </div>
+            </div>
+
+            <!-- Pratonton Kamera Mini (Sudut Kanan) -->
+            <div class="relative w-28 h-20 sm:w-36 sm:h-28 rounded-2xl overflow-hidden border-2 border-cyan-400 bg-slate-950 shadow-lg shrink-0">
+                <video id="webcam-preview" class="w-full h-full object-cover" autoplay playsinline muted></video>
+                <div id="hand-status-badge" class="absolute bottom-1 left-1 right-1 text-[10px] sm:text-xs font-bold text-center bg-black/75 text-yellow-300 rounded px-1 py-0.5 truncate">
+                    Mencari Tangan...
+                </div>
+            </div>
+        </div>
+
+        <!-- Mesej Maklum Balas Segera (Betul / Salah) -->
+        <div id="feedback-banner" class="h-9 sm:h-11 flex items-center justify-center mb-2">
+            <span id="feedback-text" class="text-xl sm:text-3xl font-extrabold px-6 py-1 rounded-full hidden transition-all"></span>
+        </div>
+
+        <!-- Grid 4 Pilihan Habitat -->
+        <div id="choices-grid" class="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5 w-full max-w-5xl">
+            <!-- Kad Habitat akan dijana secara dinamik & rawak oleh JavaScript -->
+        </div>
+    </main>
+
+    <!-- =========================================================
+         3. SKRIN KEPUTUSAN AKHIR (GAME OVER / VICTORY SCREEN)
+    ========================================================== -->
+    <div id="end-screen" class="fixed inset-0 z-40 hidden flex-col items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md text-center">
+        <div class="max-w-lg w-full bg-gradient-to-b from-indigo-900 to-slate-900 border-4 border-yellow-400 rounded-3xl p-6 sm:p-8 shadow-2xl">
+            <div id="end-emoji" class="text-7xl mb-2 animate-bounce">🏆</div>
+            <h2 id="end-title" class="text-3xl sm:text-4xl font-extrabold text-yellow-300 mb-2">
+                TAHNIAH, WIRA PETIR!
+            </h2>
+            <p id="end-subtitle" class="text-cyan-200 text-lg mb-6">
+                Kamu berjaya membantu semua haiwan pulang ke rumah!
+            </p>
+
+            <div class="bg-slate-950/70 rounded-2xl p-5 mb-6 border-2 border-indigo-500/40 space-y-2">
+                <div class="text-slate-300 text-lg">Markah Akhir Kamu:</div>
+                <div id="final-score" class="text-5xl font-extrabold text-yellow-400">0</div>
+                <div id="final-stats" class="text-sm text-cyan-300 pt-2">
+                    Jawapan Betul: 0 / 10
+                </div>
+            </div>
+
+            <button onclick="restartGame()" class="w-full py-4 bg-gradient-to-r from-emerald-400 to-teal-500 hover:from-emerald-300 hover:to-teal-400 text-slate-950 font-extrabold text-2xl rounded-full shadow-[0_7px_0_#065f46] active:translate-y-1 transition-all cursor-pointer">
+                🔄 MAIN SEMULA
+            </button>
+        </div>
+    </div>
+
+    <script>
+        /**
+         * =========================================================================
+         * 1. DATA SOALAN & HABITAT DUNIA HAIWAN (10 SOALAN PRASEKOLAH)
+         * =========================================================================
+         */
+        const HABITATS = {
+            HUTAN: {
+                id: 'HUTAN',
+                name: 'Hutan',
+                emoji: '🌳',
+                subEmojis: '🌿🐒🍃',
+                bgClass: 'from-emerald-500 to-green-700',
+                borderClass: 'border-emerald-300'
+            },
+            LAUT: {
+                id: 'LAUT',
+                name: 'Laut',
+                emoji: '🌊',
+                subEmojis: '🐠🐚🪸',
+                bgClass: 'from-sky-400 to-blue-700',
+                borderClass: 'border-sky-200'
+            },
+            GURUN: {
+                id: 'GURUN',
+                name: 'Gurun Panas',
+                emoji: '🏜️',
+                subEmojis: '☀️🌵🐪',
+                bgClass: 'from-amber-400 to-orange-600',
+                borderClass: 'border-amber-200'
+            },
+            KUTUB: {
+                id: 'KUTUB',
+                name: 'Kutub Utara',
+                emoji: '🧊',
+                subEmojis: '❄️⛄🏔️',
+                bgClass: 'from-cyan-300 to-indigo-600',
+                borderClass: 'border-white'
+            }
+        };
+
+        const QUESTIONS = [
+            { animal: 'Harimau', emoji: '🐯', question: 'Di manakah harimau tinggal?', answer: 'HUTAN' },
+            { animal: 'Ikan', emoji: '🐠', question: 'Di manakah ikan tinggal?', answer: 'LAUT' },
+            { animal: 'Unta', emoji: '🐪', question: 'Di manakah unta tinggal?', answer: 'GURUN' },
+            { animal: 'Beruang Kutub', emoji: '🐻‍❄️', question: 'Di manakah beruang kutub tinggal?', answer: 'KUTUB' },
+            { animal: 'Monyet', emoji: '🐒', question: 'Di manakah monyet tinggal?', answer: 'HUTAN' },
+            { animal: 'Sotong', emoji: '🐙', question: 'Di manakah sotong tinggal?', answer: 'LAUT' },
+            { animal: 'Gajah', emoji: '🐘', question: 'Di manakah gajah tinggal?', answer: 'HUTAN' },
+            { animal: 'Anjing Laut', emoji: '🦭', question: 'Di manakah anjing laut tinggal?', answer: 'KUTUB' },
+            { animal: 'Ketam', emoji: '🦀', question: 'Di manakah ketam tinggal?', answer: 'LAUT' },
+            { animal: 'Ular Gurun', emoji: '🐍', question: 'Di manakah ular gurun tinggal?', answer: 'GURUN' }
+        ];
+
+        /**
+         * =========================================================================
+         * 2. WEB AUDIO API - PENJANA KESAN BUNYI SINTETIK (TANPA FAIL LUAR)
+         * =========================================================================
+         */
+        class SoundFX {
+            constructor() {
+                this.ctx = null;
+            }
+
+            init() {
+                if (!this.ctx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    this.ctx = new AudioContext();
+                }
+                if (this.ctx.state === 'suspended') {
+                    this.ctx.resume();
+                }
+            }
+
+            // Bunyi "Beep" lembut apabila sasaran dikunci
+            playLock() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(540, this.ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(920, this.ctx.currentTime + 0.09);
+                gain.gain.setValueAtTime(0.15, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.09);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.09);
+            }
+
+            // Bunyi dentuman petir (Thunder Strike)
+            playThunder() {
+                if (!this.ctx) return;
+                const duration = 0.55;
+                const bufferSize = this.ctx.sampleRate * duration;
+                const buffer = this.ctx.createBuffer(1, bufferSize, this.ctx.sampleRate);
+                const data = buffer.getChannelData(0);
+                for (let i = 0; i < bufferSize; i++) {
+                    data[i] = (Math.random() * 2 - 1) * Math.exp(-i / (this.ctx.sampleRate * 0.18));
+                }
+
+                const noise = this.ctx.createBufferSource();
+                noise.buffer = buffer;
+
+                const filter = this.ctx.createBiquadFilter();
+                filter.type = 'lowpass';
+                filter.frequency.setValueAtTime(1250, this.ctx.currentTime);
+                filter.frequency.exponentialRampToValueAtTime(140, this.ctx.currentTime + duration);
+
+                const gain = this.ctx.createGain();
+                gain.gain.setValueAtTime(0.65, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.01, this.ctx.currentTime + duration);
+
+                noise.connect(filter);
+                filter.connect(gain);
+                gain.connect(this.ctx.destination);
+                noise.start();
+            }
+
+            // Bunyi melodi ceria apabila jawapan BETUL
+            playCorrect() {
+                if (!this.ctx) return;
+                const notes = [523.25, 659.25, 783.99, 1046.50]; // C5, E5, G5, C6
+                notes.forEach((freq, idx) => {
+                    const osc = this.ctx.createOscillator();
+                    const gain = this.ctx.createGain();
+                    osc.type = 'triangle';
+                    const startTime = this.ctx.currentTime + idx * 0.08;
+                    osc.frequency.setValueAtTime(freq, startTime);
+                    gain.gain.setValueAtTime(0.25, startTime);
+                    gain.gain.exponentialRampToValueAtTime(0.001, startTime + 0.25);
+                    osc.connect(gain);
+                    gain.connect(this.ctx.destination);
+                    osc.start(startTime);
+                    osc.stop(startTime + 0.25);
+                });
+            }
+
+            // Bunyi rendah apabila jawapan SALAH atau masa tamat
+            playWrong() {
+                if (!this.ctx) return;
+                const osc = this.ctx.createOscillator();
+                const gain = this.ctx.createGain();
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(220, this.ctx.currentTime);
+                osc.frequency.linearRampToValueAtTime(110, this.ctx.currentTime + 0.35);
+                gain.gain.setValueAtTime(0.25, this.ctx.currentTime);
+                gain.gain.exponentialRampToValueAtTime(0.001, this.ctx.currentTime + 0.35);
+                osc.connect(gain);
+                gain.connect(this.ctx.destination);
+                osc.start();
+                osc.stop(this.ctx.currentTime + 0.35);
+            }
+        }
+
+        const sfx = new SoundFX();
+
+        /**
+         * =========================================================================
+         * 3. KEADAAN PERMAINAN (GAME STATE)
+         * =========================================================================
+         */
+        let gameState = {
+            currentQuestionIndex: 0,
+            score: 0,
+            correctCount: 0,
+            isProcessingAnswer: false,
+            isPlaying: false,
+            shuffledQuestions: [],
+            lockedHabitatId: null,
+            cursorX: window.innerWidth / 2,
+            cursorY: window.innerHeight / 2,
+            lastPalmSize: 0,
+            lastFireTime: 0,
+            cameraActive: false
+        };
+
+        /**
+         * =========================================================================
+         * 4. KANVAS ANIMASI PETIR (LIGHTNING BOLT RENDERER)
+         * =========================================================================
+         */
+        const fxCanvas = document.getElementById('fx-canvas');
+        const fxCtx = fxCanvas.getContext('2d');
+        let activeBolts = [];
+        let particles = [];
+
+        function resizeCanvas() {
+            fxCanvas.width = window.innerWidth;
+            fxCanvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function spawnLightningBolt(targetX, targetY, isCorrect) {
+            // Kilat skrin penuh
+            const flash = document.getElementById('flash-overlay');
+            flash.classList.remove('flash-effect');
+            void flash.offsetWidth;
+            flash.classList.add('flash-effect');
+
+            // Bina 3 cabang petir dari bahagian atas skrin ke kad sasaran
+            for (let b = 0; b < 3; b++) {
+                const startX = targetX + (Math.random() - 0.5) * 260;
+                const startY = 0;
+                const segments = [];
+                const steps = 14;
+
+                let currX = startX;
+                let currY = startY;
+                segments.push({ x: currX, y: currY });
+
+                for (let i = 1; i <= steps; i++) {
+                    const progress = i / steps;
+                    const idealX = startX + (targetX - startX) * progress;
+                    const idealY = startY + (targetY - startY) * progress;
+                    const jitter = (i === steps) ? 0 : (Math.random() - 0.5) * 65;
+                    currX = idealX + jitter;
+                    currY = idealY;
+                    segments.push({ x: currX, y: currY });
+                }
+
+                activeBolts.push({
+                    segments,
+                    alpha: 1.0,
+                    color: isCorrect ? '#fde047' : '#fb7185',
+                    width: b === 0 ? 7 : 3
+                });
+            }
+
+            // Percikan bunga api di titik hentaman
+            for (let p = 0; p < 30; p++) {
+                const angle = Math.random() * Math.PI * 2;
+                const speed = 3 + Math.random() * 9;
+                particles.push({
+                    x: targetX,
+                    y: targetY,
+                    vx: Math.cos(angle) * speed,
+                    vy: Math.sin(angle) * speed,
+                    radius: 3 + Math.random() * 5,
+                    color: isCorrect ? (Math.random() > 0.5 ? '#facc15' : '#38bdf8') : '#f43f5e',
+                    alpha: 1.0
+                });
+            }
+        }
+
+        function animateFX() {
+            fxCtx.clearRect(0, 0, fxCanvas.width, fxCanvas.height);
+
+            // Lukis petir
+            for (let i = activeBolts.length - 1; i >= 0; i--) {
+                const bolt = activeBolts[i];
+                fxCtx.save();
+                fxCtx.beginPath();
+                fxCtx.strokeStyle = bolt.color;
+                fxCtx.shadowColor = '#ffffff';
+                fxCtx.shadowBlur = 20;
+                fxCtx.lineWidth = bolt.width;
+                fxCtx.lineCap = 'round';
+                fxCtx.lineJoin = 'round';
+                fxCtx.globalAlpha = bolt.alpha;
+
+                bolt.segments.forEach((pt, idx) => {
+                    if (idx === 0) fxCtx.moveTo(pt.x, pt.y);
+                    else fxCtx.lineTo(pt.x, pt.y);
+                });
+                fxCtx.stroke();
+                fxCtx.restore();
+
+                bolt.alpha -= 0.065;
+                if (bolt.alpha <= 0) activeBolts.splice(i, 1);
+            }
+
+            // Lukis percikan
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                fxCtx.save();
+                fxCtx.globalAlpha = p.alpha;
+                fxCtx.fillStyle = p.color;
+                fxCtx.beginPath();
+                fxCtx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                fxCtx.fill();
+                fxCtx.restore();
+
+                p.x += p.vx;
+                p.y += p.vy;
+                p.vy += 0.25;
+                p.alpha -= 0.035;
+                if (p.alpha <= 0) particles.splice(i, 1);
+            }
+
+            requestAnimationFrame(animateFX);
+        }
+        requestAnimationFrame(animateFX);
+
+        /**
+         * =========================================================================
+         * 5. LOGIK UTAMA PERMAINAN (SOALAN, SKOR, NYAWA, TIMER)
+         * =========================================================================
+         */
+        function shuffleArray(array) {
+            const arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        }
+
+        async function initGame() {
+            sfx.init();
+            const startBtn = document.getElementById('start-btn');
+            const loadingText = document.getElementById('loading-status');
+            startBtn.disabled = true;
+            startBtn.classList.add('opacity-50');
+            loadingText.classList.remove('hidden');
+
+            await setupMediaPipeHands();
+
+            document.getElementById('start-screen').classList.add('hidden');
+            startNewSession();
+        }
+
+        function startNewSession() {
+            gameState.currentQuestionIndex = 0;
+            gameState.score = 0;
+            gameState.correctCount = 0;
+            gameState.isPlaying = true;
+            gameState.isProcessingAnswer = false;
+            gameState.shuffledQuestions = shuffleArray(QUESTIONS);
+
+            document.getElementById('end-screen').classList.add('hidden');
+            document.getElementById('end-screen').classList.remove('flex');
+            updateHUD();
+            loadQuestion();
+        }
+
+        function restartGame() {
+            sfx.init();
+            startNewSession();
+        }
+
+        function updateHUD() {
+            document.getElementById('score-display').textContent = gameState.score;
+            document.getElementById('question-counter').textContent = `${Math.min(gameState.currentQuestionIndex + 1, 10)}/10`;
+        }
+
+        function loadQuestion() {
+            if (gameState.currentQuestionIndex >= gameState.shuffledQuestions.length) {
+                endGame();
+                return;
+            }
+
+            gameState.isProcessingAnswer = false;
+            gameState.lockedHabitatId = null;
+
+            const q = gameState.shuffledQuestions[gameState.currentQuestionIndex];
+            document.getElementById('animal-emoji').textContent = q.emoji;
+            document.getElementById('animal-badge').textContent = q.animal;
+            document.getElementById('question-text').textContent = q.question;
+
+            const fbText = document.getElementById('feedback-text');
+            fbText.classList.add('hidden');
+
+            // Acak susunan 4 pilihan habitat setiap kali soalan dimuatkan
+            const habitatKeys = shuffleArray(Object.keys(HABITATS));
+            const grid = document.getElementById('choices-grid');
+            grid.innerHTML = '';
+
+            habitatKeys.forEach((key) => {
+                const hab = HABITATS[key];
+                const card = document.createElement('div');
+                card.id = `card-${hab.id}`;
+                card.dataset.habitat = hab.id;
+                card.className = `habitat-card cursor-pointer bg-gradient-to-b ${hab.bgClass} border-4 ${hab.borderClass} rounded-3xl p-4 sm:p-6 flex flex-col items-center justify-center text-center shadow-xl relative overflow-hidden min-h-[145px] sm:min-h-[190px]`;
+
+                card.innerHTML = `
+                    <div class="lock-badge hidden absolute top-2 right-2 bg-yellow-300 text-slate-950 font-extrabold text-xs px-2.5 py-1 rounded-full shadow animate-pulse">
+                        ⚡ DIKUNCI
+                    </div>
+                    <div class="text-5xl sm:text-7xl mb-2 drop-shadow-md pointer-events-none">${hab.emoji}</div>
+                    <div class="text-xl sm:text-2xl font-extrabold text-white drop-shadow pointer-events-none">${hab.name}</div>
+                    <div class="text-sm sm:text-base opacity-90 mt-1 pointer-events-none">${hab.subEmojis}</div>
+                `;
+
+                // Sokongan tetikus / sentuhan sebagai sandaran
+                card.addEventListener('mouseenter', () => {
+                    if (!gameState.isProcessingAnswer) setLockedCard(hab.id);
+                });
+                card.addEventListener('click', () => {
+                    if (!gameState.isProcessingAnswer) {
+                        setLockedCard(hab.id);
+                        triggerLightningAttack();
+                    }
+                });
+
+                grid.appendChild(card);
+            });
+
+            updateHUD();
+        }
+
+        // Mengunci kad habitat berdasarkan kedudukan tapak tangan
+        function setLockedCard(habitatId) {
+            if (gameState.lockedHabitatId === habitatId) return;
+            gameState.lockedHabitatId = habitatId;
+
+            document.querySelectorAll('.habitat-card').forEach(card => {
+                const badge = card.querySelector('.lock-badge');
+                if (card.dataset.habitat === habitatId) {
+                    card.classList.add('locked');
+                    if (badge) badge.classList.remove('hidden');
+                    sfx.playLock();
+                } else {
+                    card.classList.remove('locked');
+                    if (badge) badge.classList.add('hidden');
+                }
+            });
+        }
+
+        // Melancarkan sambaran petir apabila pemain menggenggam atau menarik tangan
+        function triggerLightningAttack() {
+            if (!gameState.isPlaying || gameState.isProcessingAnswer || !gameState.lockedHabitatId) return;
+
+            const now = Date.now();
+            if (now - gameState.lastFireTime < 900) return;
+            gameState.lastFireTime = now;
+
+            gameState.isProcessingAnswer = true;
+
+            const selectedId = gameState.lockedHabitatId;
+            const currentQ = gameState.shuffledQuestions[gameState.currentQuestionIndex];
+            const isCorrect = (selectedId === currentQ.answer);
+
+            const targetCard = document.getElementById(`card-${selectedId}`);
+            const rect = targetCard.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const centerY = rect.top + rect.height / 2;
+
+            // Mainkan bunyi & animasi petir
+            sfx.playThunder();
+            spawnLightningBolt(centerX, centerY, isCorrect);
+
+            if (isCorrect) {
+                gameState.score += 100;
+                gameState.correctCount++;
+                updateHUD();
+
+                targetCard.classList.add('ring-8', 'ring-yellow-300', 'scale-105');
+                setTimeout(() => sfx.playCorrect(), 200);
+                showFeedback(`⚡ HEBAT! ${currentQ.animal} tinggal di ${HABITATS[currentQ.answer].name}! 🎉`, 'bg-emerald-500 text-slate-950');
+            } else {
+                targetCard.classList.add('shake-wrong', 'opacity-75');
+                setTimeout(() => sfx.playWrong(), 200);
+
+                const correctCard = document.getElementById(`card-${currentQ.answer}`);
+                if (correctCard) {
+                    correctCard.classList.add('ring-8', 'ring-emerald-400', 'scale-105');
+                }
+                showFeedback(`❌ Opps! ${currentQ.animal} tinggal di ${HABITATS[currentQ.answer].name}!`, 'bg-rose-600 text-white');
+            }
+
+            setTimeout(() => {
+                gameState.currentQuestionIndex++;
+                loadQuestion();
+            }, 2100);
+        }
+
+        function showFeedback(message, colorClasses) {
+            const fbText = document.getElementById('feedback-text');
+            fbText.textContent = message;
+            fbText.className = `text-lg sm:text-2xl font-extrabold px-5 py-1.5 rounded-full shadow-lg ${colorClasses}`;
+            fbText.classList.remove('hidden');
+        }
+
+        function endGame() {
+            gameState.isPlaying = false;
+            document.getElementById('hand-reticle').classList.add('hidden');
+
+            const endScreen = document.getElementById('end-screen');
+            const endEmoji = document.getElementById('end-emoji');
+            const endTitle = document.getElementById('end-title');
+            const endSubtitle = document.getElementById('end-subtitle');
+
+            if (gameState.correctCount >= 7) {
+                endEmoji.textContent = '🏆⚡';
+                endTitle.textContent = 'TAHNIAH, WIRA PETIR!';
+                endSubtitle.textContent = 'Hebat sekali! Kamu kenal semua tempat tinggal haiwan!';
+            } else {
+                endEmoji.textContent = '🌟🦁';
+                endTitle.textContent = 'SYABAS, ADIK PINTAR!';
+                endSubtitle.textContent = 'Tahniah kerana menamatkan kesemua 10 soalan!';
+            }
+            sfx.playCorrect();
+
+            document.getElementById('final-score').textContent = gameState.score;
+            document.getElementById('final-stats').textContent = `Jawapan Betul: ${gameState.correctCount} daripada 10 soalan`;
+
+            endScreen.classList.remove('hidden');
+            endScreen.classList.add('flex');
+        }
+
+        /**
+         * =========================================================================
+         * 6. INTEGRASI MEDIAPIPE HANDS (PENGESANAN TAPAK TANGAN & GENGGAMAN)
+         * =========================================================================
+         */
+        async function setupMediaPipeHands() {
+            const videoElement = document.getElementById('webcam-preview');
+            const statusBadge = document.getElementById('hand-status-badge');
+
+            try {
+                const hands = new Hands({
+                    locateFile: (file) => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`
+                });
+
+                hands.setOptions({
+                    maxNumHands: 1,
+                    modelComplexity: 1,
+                    minDetectionConfidence: 0.65,
+                    minTrackingConfidence: 0.65
+                });
+
+                hands.onResults(onHandResults);
+
+                const camera = new Camera(videoElement, {
+                    onFrame: async () => {
+                        await hands.send({ image: videoElement });
+                    },
+                    width: 640,
+                    height: 480
+                });
+
+                await camera.start();
+                gameState.cameraActive = true;
+                statusBadge.textContent = 'Kamera Aktif ✋';
+            } catch (err) {
+                console.warn('Kamera tidak dapat diakses, mod sentuh/tetikus diaktifkan:', err);
+                statusBadge.textContent = 'Mod Sentuh / Tetikus';
+            }
+        }
+
+        function onHandResults(results) {
+            const reticle = document.getElementById('hand-reticle');
+            const reticleCore = document.getElementById('reticle-core');
+            const statusBadge = document.getElementById('hand-status-badge');
+
+            if (!gameState.isPlaying) {
+                reticle.classList.add('hidden');
+                return;
+            }
+
+            if (results.multiHandLandmarks && results.multiHandLandmarks.length > 0) {
+                const landmarks = results.multiHandLandmarks[0];
+
+                // Titik tengah tapak tangan (Landmark 9) dengan koordinat X cermin
+                const rawX = 1 - landmarks[9].x;
+                const rawY = landmarks[9].y;
+
+                // Pelicinan pergerakan kursor
+                const targetScreenX = rawX * window.innerWidth;
+                const targetScreenY = rawY * window.innerHeight;
+                gameState.cursorX += (targetScreenX - gameState.cursorX) * 0.45;
+                gameState.cursorY += (targetScreenY - gameState.cursorY) * 0.45;
+
+                // Paparkan Reticle Sasaran
+                reticle.classList.remove('hidden');
+                reticle.style.left = `${gameState.cursorX}px`;
+                reticle.style.top = `${gameState.cursorY}px`;
+
+                // Kira skala tapak tangan untuk mengesan tarikan tangan ke belakang
+                const wrist = landmarks[0];
+                const middleMCP = landmarks[9];
+                const palmScale = Math.hypot(middleMCP.x - wrist.x, middleMCP.y - wrist.y);
+
+                // Semak jari tertutup (Clenched Fist)
+                const fingerTips = [8, 12, 16, 20];
+                const fingerPIPs = [6, 10, 14, 18];
+                let foldedFingers = 0;
+
+                for (let i = 0; i < 4; i++) {
+                    const tipDist = Math.hypot(landmarks[fingerTips[i]].x - wrist.x, landmarks[fingerTips[i]].y - wrist.y);
+                    const pipDist = Math.hypot(landmarks[fingerPIPs[i]].x - wrist.x, landmarks[fingerPIPs[i]].y - wrist.y);
+                    if (tipDist < pipDist * 1.05) {
+                        foldedFingers++;
+                    }
+                }
+
+                // Gesture 1: Genggam tangan (Clench Fist)
+                const isFist = foldedFingers >= 3;
+
+                // Gesture 2: Tarik tangan ke arah diri (saiz tapak tangan mengecil dengan pantas)
+                const isPullBack = (gameState.lastPalmSize > 0) && ((gameState.lastPalmSize - palmScale) > 0.045);
+                gameState.lastPalmSize = palmScale;
+
+                if (isFist || isPullBack) {
+                    statusBadge.textContent = '⚡ TEMBAK PETIR!';
+                    reticleCore.textContent = '🔥';
+                    reticleCore.classList.add('scale-150', 'bg-orange-400');
+
+                    if (gameState.lockedHabitatId && !gameState.isProcessingAnswer) {
+                        triggerLightningAttack();
+                    }
+                } else {
+                    statusBadge.textContent = '✋ Mengunci Sasaran';
+                    reticleCore.textContent = '⚡';
+                    reticleCore.classList.remove('scale-150', 'bg-orange-400');
+
+                    detectCardUnderReticle(gameState.cursorX, gameState.cursorY);
+                }
+            } else {
+                reticle.classList.add('hidden');
+                statusBadge.textContent = 'Tunjukkan Tangan ✋';
+                gameState.lastPalmSize = 0;
+            }
+        }
+
+        function detectCardUnderReticle(x, y) {
+            if (gameState.isProcessingAnswer) return;
+            const cards = document.querySelectorAll('.habitat-card');
+            let foundId = null;
+
+            cards.forEach(card => {
+                const rect = card.getBoundingClientRect();
+                if (
+                    x >= rect.left - 15 &&
+                    x <= rect.right + 15 &&
+                    y >= rect.top - 15 &&
+                    y <= rect.bottom + 15
+                ) {
+                    foundId = card.dataset.habitat;
+                }
+            });
+
+            if (foundId) {
+                setLockedCard(foundId);
+            }
+        }
+    </script>
+</body>
+</html>
